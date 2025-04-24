@@ -1,0 +1,117 @@
+# STEP 1: Install necessary packages
+!pip install -q ultralytics opencv-python-headless numpy matplotlib
+
+# STEP 2: Import libraries
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from ultralytics import YOLO
+import time
+
+# STEP 3: Set your manually uploaded video path (using Files tab in Colab)
+video_path = "/content/What2.mp4"  # Change to your actual uploaded filename
+
+# STEP 4: Load YOLOv8 model
+model = YOLO('yolov8n.pt')  # YOLOv8-nano: Lightweight for real-time applications
+
+# STEP 5: Process video: Count people per frame and gather processing times for FPS
+cap = cv2.VideoCapture(video_path)
+frame_count = 0
+people_per_frame = []
+processing_times = []
+
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    frame_count += 1
+    start = time.time()
+
+    # Run YOLOv8 inference: detecting only the "person" class (class ID 0)
+    results = model.predict(frame, classes=[0], conf=0.5, verbose=False)
+    boxes = results[0].boxes.xyxy.cpu().numpy() if results else []
+    people_count = len(boxes)
+
+    people_per_frame.append(people_count)
+    processing_times.append(time.time() - start)
+
+cap.release()
+
+# STEP 6: Display efficiency metrics (basic computed metrics)
+print(f"✅ Total Frames Processed: {frame_count}")
+print(f"👥 Average People/Frame: {np.mean(people_per_frame):.2f}")
+print(f"📈 Maximum People Detected in a Frame: {np.max(people_per_frame)}")
+print(f"📉 Minimum People Detected in a Frame: {np.min(people_per_frame)}")
+print(f"⚡ Average FPS (Inference Speed): {1 / np.mean(processing_times):.2f}")
+
+# --------------------------------------------------------------------------------
+# STEP 6A: OPTIONAL: Compute additional evaluation metrics (Precision, Recall, F1 Score, mAP@0.5)
+# NOTE: The following metrics require ground-truth annotations.
+# If you have a ground truth for each frame in a similar format, you can compute these metrics.
+# Below is a placeholder example with dummy values.
+
+# # Example: Assume ground_truth is provided and you computed these values.
+# precision = 0.932  # 93.2%
+# recall = 0.897     # 89.7%
+# f1_score = 2 * (precision * recall) / (precision + recall)  # F1 Score calculation
+# mAP = 0.92         # mAP@0.5 is 92.0%
+
+# print("\n🔍 Evaluation Metrics (Placeholders if ground truth is available):")
+# print(f"Precision: {precision*100:.1f}%")
+# print(f"Recall: {recall*100:.1f}%")
+# print(f"F1 Score: {f1_score*100:.1f}%")
+# print(f"mAP@0.5: {mAP*100:.1f}%")
+# --------------------------------------------------------------------------------
+
+# STEP 7: Plot people count over time
+plt.figure(figsize=(12, 5))
+plt.plot(people_per_frame, color='blue', linewidth=2)
+plt.title("People Count per Frame", fontsize=14)
+plt.xlabel("Frame Number", fontsize=12)
+plt.ylabel("Number of People Detected", fontsize=12)
+plt.grid(True)
+plt.show()
+
+# STEP 8: Display annotated sample frames (e.g., every 50th frame)
+cap = cv2.VideoCapture(video_path)
+sample_frames = []
+frame_id = 0
+
+while cap.isOpened() and len(sample_frames) < 5:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    frame_id += 1
+    if frame_id % 50 != 0:
+        continue  # sample every 50th frame
+
+    # Run YOLO inference again on sampled frames
+    results = model.predict(frame, classes=[0], conf=0.5, verbose=False)
+    boxes = results[0].boxes.xyxy.cpu().numpy() if results else []
+
+    # Draw bounding boxes
+    for box in boxes:
+        x1, y1, x2, y2 = map(int, box)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+    # Display people count on the frame
+    cv2.putText(frame, f"People: {len(boxes)}", (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
+    # Convert BGR to RGB for matplotlib display
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    sample_frames.append(frame_rgb)
+
+cap.release()
+
+# STEP 9: Visualize sample annotated frames
+plt.figure(figsize=(20, 10))
+for i, frame in enumerate(sample_frames):
+    plt.subplot(1, len(sample_frames), i + 1)
+    plt.imshow(frame)
+    plt.axis('off')
+    plt.title(f"Frame {i*50}", fontsize=12)
+plt.suptitle("Sample Annotated Frames with People Count", fontsize=16)
+plt.show()

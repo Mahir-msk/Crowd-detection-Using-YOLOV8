@@ -1,0 +1,55 @@
+# Install required packages (uncomment when running in a fresh environment like Colab)
+# !pip install gensim
+# !pip install transformers
+# !pip install scikit-learn
+!pip install --upgrade numpy gensim --force-reinstall
+
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+import gensim.downloader as api
+from transformers import MarianMTModel, MarianTokenizer
+import torch
+
+# Step 1: Sample Documents & Query
+documents = ["The cat sits on the mat", "The dog barks at the cat", "Cats and dogs are pets"]
+query = ["pet animals"]
+
+# Step 2: TF-IDF Vectorization
+vectorizer = TfidfVectorizer()
+tfidf_matrix = vectorizer.fit_transform(documents)
+query_tfidf = vectorizer.transform(query)
+
+# Step 3: Load Pre-trained Word Embeddings
+word_vectors = api.load("glove-wiki-gigaword-50")
+
+# Step 4: Compute Embedding-based Semantic Similarity
+def get_embedding(text):
+    valid_words = [word for word in text.lower().split() if word in word_vectors]
+    if not valid_words:
+        return np.zeros(word_vectors.vector_size)
+    return np.mean([word_vectors[word] for word in valid_words], axis=0)
+
+query_embedding = get_embedding(query[0])
+document_embeddings = np.array([get_embedding(doc) for doc in documents])
+
+# Step 5: Combine TF-IDF and Embedding Similarity
+tfidf_similarity = cosine_similarity(query_tfidf, tfidf_matrix).flatten()
+embedding_similarity = cosine_similarity([query_embedding], document_embeddings).flatten()
+combined_similarity = 0.5 * tfidf_similarity + 0.5 * embedding_similarity
+
+print("\nCombined Similarity Scores:", combined_similarity)
+
+# Step 6: Translate Text (English to Urdu) using Pretrained Model
+model_name = "Helsinki-NLP/opus-mt-en-ur"  # Use 'en-ur' for English to Urdu
+tokenizer = MarianTokenizer.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name)
+
+text_to_translate = "The cat sits on the mat"
+inputs = tokenizer([text_to_translate], return_tensors="pt", padding=True)
+translated_tokens = model.generate(**inputs)
+translated_text = tokenizer.decode(translated_tokens[0], skip_special_tokens=True)
+
+print("\nOriginal Text:", text_to_translate)
+print("Translated Text (English to Urdu):", translated_text)
